@@ -21,14 +21,14 @@ namespace Lab2
             set { _p = value; }
         }
 
-        public Rsa(int e, bool optimize = true)
+        public Rsa(BigInteger e, bool optimize = true)
         {
             _optimize = optimize;
             _p = new RsaParams();
-            _p.e = BigInteger.ValueOf(e);       // Устанавливаем экспоненту
+            _p.e = e;
         }
 
-        public Rsa(int e, int keyLen, int certainty, Random rnd, bool optimize = true) : this(e, optimize)
+        public Rsa(BigInteger e, int keyLen, int certainty, Random rnd, bool optimize = true) : this(e, optimize)
         {
             BigInteger p, q;                    // Секретные значения p и q
             int comp;                           // Переменная для сравнения

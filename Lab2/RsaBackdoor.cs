@@ -7,7 +7,7 @@ namespace Lab2
 {
     static class RsaBackdoor
     {
-        public static Rsa Inject(int e, int keyLen, int certainty, byte[] publicKey)
+        public static Rsa Inject(BigInteger e, int keyLen, int certainty, byte[] publicKey)
         {
             byte[] privateData = new byte[MontgomeryCurve25519.PrivateKeySizeInBytes];
             RNGCryptoServiceProvider rng = new RNGCryptoServiceProvider();
@@ -28,7 +28,7 @@ namespace Lab2
             BigInteger n = new BigInteger(mod);
 
             // q = NextPrime(n' / p)
-            rsap.q = (n.Divide(rsap.p)).NextProbablePrime();    
+            rsap.q = (n.Divide(rsap.p)).NextProbablePrime();
 
             if (rsap.p.CompareTo(rsap.q) < 0)   // Если q больше p, меняем их местами
             {
@@ -42,7 +42,7 @@ namespace Lab2
             return rsa;
         }
 
-        public static Rsa Extract(int e, BigInteger mod, int certainty, byte[] privateKey)
+        public static Rsa Extract(BigInteger e, BigInteger mod, int certainty, byte[] privateKey)
         {
             byte[] modulus = mod.ToByteArray();
             byte[] payload = new byte[MontgomeryCurve25519.PublicKeySizeInBytes];
