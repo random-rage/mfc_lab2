@@ -1,9 +1,6 @@
 ﻿using Org.BouncyCastle.Math;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Lab2
 {
@@ -13,10 +10,11 @@ namespace Lab2
 
         static void Main(string[] args)
         {
+            BigInteger e, n, m;
             Rsa hacked;
-
-            #region Bad params
-            Console.Write("=== Bad params attack ===\nEnter N to factorize: ");
+            
+            #region Factorization
+            Console.Write("=== Factorization attack ===\nEnter N to factorize: ");
             hacked = FactorizationAttack
                 (
                     BigInteger.ValueOf(E),
@@ -28,7 +26,7 @@ namespace Lab2
             
             #region Wiener
             Console.Write("\n=== Wiener attack ===\nEnter E: ");
-            BigInteger e = new BigInteger(Console.ReadLine());
+            e = new BigInteger(Console.ReadLine());
             Console.Write("Enter N: ");
 
             hacked = WienerAttack(e, new BigInteger(Console.ReadLine()));
@@ -37,8 +35,37 @@ namespace Lab2
             else
                 Console.WriteLine("Result:\nd = {0}", hacked.Params.d);
             #endregion
+            
+            #region Re-encryption
+            Console.Write("\n=== Re-encryption attack ===\nEnter E: ");
+            e = new BigInteger(Console.ReadLine());
+            Console.Write("Enter N: ");
+            n = new BigInteger(Console.ReadLine());
+            Console.Write("Enter ciphertext: ");
 
-            Console.WriteLine("Done!");
+            m = ReencryptionAttack(e, n, new BigInteger(Console.ReadLine()));
+            Console.WriteLine("Result:\nm = {0}", m);
+            #endregion
+            
+            #region Shared module
+            Console.Write("\n=== Shared module attack ===\nEnter E1: ");
+            e = new BigInteger(Console.ReadLine());
+            Console.Write("Enter E2: ");
+            BigInteger e2 = new BigInteger(Console.ReadLine());
+            Console.Write("Enter N: ");
+            n = new BigInteger(Console.ReadLine());
+            Console.Write("Enter C1: ");
+            BigInteger c = new BigInteger(Console.ReadLine());
+            Console.Write("Enter C2: ");
+
+            m = SharedModuleAttack(e, e2, n, c, new BigInteger(Console.ReadLine()));
+            if (m.SignValue == 0)
+                Console.WriteLine("Shared module attack failed, GCD(e1, e2) != 1");
+            else
+                Console.WriteLine("Result:\nm = {0}", m);
+            #endregion
+
+            Console.WriteLine("\nDone!");
             Console.ReadKey();
         }
 
@@ -158,6 +185,67 @@ namespace Lab2
                 }
             }
             return rsa;
+        }
+
+        static BigInteger ReencryptionAttack(BigInteger e, BigInteger n, BigInteger c)
+        {
+            BigInteger prev = c.ModPow(e, n);
+            BigInteger m = prev.ModPow(e, n);
+
+            while (m.CompareTo(c) != 0)
+            {
+                prev = m;
+                m = prev.ModPow(e, n);
+            }
+            return prev;
+        }
+
+        // Возвращает НОД(a, b) и находит r, s такие, что a*r + b*s = НОД(a, b)
+        static BigInteger ExtendedEuclid(BigInteger a, BigInteger b, 
+                                         out BigInteger r, out BigInteger s)
+        {
+            BigInteger u = a;
+            BigInteger v = b;
+            BigInteger u1 = BigInteger.One;
+            BigInteger v1 = BigInteger.Zero;
+            BigInteger tmp;
+
+            while (v.SignValue > 0)
+            {
+                BigInteger[] q = u.DivideAndRemainder(v);
+
+                tmp = v1.Multiply(q[0]);
+                BigInteger tn = u1.Subtract(tmp);
+                u1 = v1;
+                v1 = tn;
+
+                u = v;
+                v = q[1];
+            }
+            r = u1;
+
+            tmp = u1.Multiply(a);
+            tmp = u.Subtract(tmp);
+            s = tmp.Divide(b);
+
+            return u;
+        }
+
+        static BigInteger SharedModuleAttack(BigInteger e1, BigInteger e2, 
+                                             BigInteger n, 
+                                             BigInteger c1, BigInteger c2)
+        {
+            BigInteger r, s;
+            BigInteger gcd = ExtendedEuclid(e1, e2, out r, out s);
+
+            // Если НОД(e1, e2) != 1, нет смысла продолжать
+            if (gcd.CompareTo(BigInteger.One) != 0)
+                return BigInteger.Zero;
+
+            BigInteger y1 = c1.ModPow(r, n);
+            BigInteger y2 = c2.ModPow(s, n);
+
+            return y1.Multiply(y2).Mod(n);
         }
     }
 }
