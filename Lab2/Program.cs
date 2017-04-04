@@ -6,7 +6,8 @@ namespace Lab2
 {
     static class Program
     {
-        const int E = 65537;
+        static readonly BigInteger E = BigInteger.ValueOf(65537);
+        static readonly BigInteger M = BigInteger.ValueOf(1234567890);
 
         static void Main(string[] args)
         {
@@ -15,11 +16,7 @@ namespace Lab2
             
             #region Factorization
             Console.Write("=== Factorization attack ===\nEnter N to factorize: ");
-            hacked = FactorizationAttack
-                (
-                    BigInteger.ValueOf(E),
-                    new BigInteger(Console.ReadLine())
-                );
+            hacked = FactorizationAttack(E, new BigInteger(Console.ReadLine()));
             Console.WriteLine("Factorization result:\np = {0}\nq = {1}", 
                               hacked.Params.p, hacked.Params.q);
             #endregion
@@ -47,8 +44,8 @@ namespace Lab2
             Console.WriteLine("Result:\nm = {0}", m);
             #endregion
             
-            #region Shared module
-            Console.Write("\n=== Shared module attack ===\nEnter E1: ");
+            #region Common module
+            Console.Write("\n=== Common module attack ===\nEnter E1: ");
             e = new BigInteger(Console.ReadLine());
             Console.Write("Enter E2: ");
             BigInteger e2 = new BigInteger(Console.ReadLine());
@@ -58,9 +55,9 @@ namespace Lab2
             BigInteger c = new BigInteger(Console.ReadLine());
             Console.Write("Enter C2: ");
 
-            m = SharedModuleAttack(e, e2, n, c, new BigInteger(Console.ReadLine()));
+            m = CommonModuleAttack(e, e2, n, c, new BigInteger(Console.ReadLine()));
             if (m.SignValue == 0)
-                Console.WriteLine("Shared module attack failed, GCD(e1, e2) != 1");
+                Console.WriteLine("Common module attack failed, GCD(e1, e2) != 1");
             else
                 Console.WriteLine("Result:\nm = {0}", m);
             #endregion
@@ -69,17 +66,18 @@ namespace Lab2
             Console.ReadKey();
         }
 
-        // Вычисляет квадратный корень по методу Ньютона
-        static BigInteger Sqrt(this BigInteger n)
+        // Вычисляет корень по методу Ньютона
+        static BigInteger Root(this BigInteger n, int e)
         {
-            BigInteger G = n.ShiftRight((n.BitLength + 1) / 2);
-            BigInteger LastG;
+            BigInteger G = n.ShiftRight((n.BitLength + 1) / e * (e - 1));
+            BigInteger LastG, E = BigInteger.ValueOf(e);
+            BigInteger E1 = E.Subtract(BigInteger.One);
             int i;
 
             while (true)
             {
                 LastG = G;
-                G = n.Divide(G).Add(G).ShiftRight(1);
+                G = n.Divide(G.Pow(e - 1)).Add(G.Multiply(E1)).Divide(E);
                 i = G.CompareTo(LastG);
 
                 if (i == 0)
@@ -103,25 +101,24 @@ namespace Lab2
                 }
             }
         }
-
+        
         static Rsa FactorizationAttack(BigInteger e, BigInteger n)
         {
-            BigInteger t = n.Sqrt();            // Предположение t[i]
-            double root;                        // Корень для проверки на полный квадрат
+            BigInteger t = n.Root(2);           // Предположение t[i]
+            BigInteger sqr, root;               // Квадрат и корень для проверки на полный квадрат
 
             do
             {
                 t = t.Add(BigInteger.One);
+                sqr = t.Square().Subtract(n);   // t[i]^2 - n
                 //            ___________
                 // Вычисляем √ t[i]^2 - n
-                root = Math.Sqrt(double.Parse(t.Square().Subtract(n).ToString()));
+                root = sqr.Root(2);
             }
-            while (root - Math.Truncate(root) > double.Epsilon);
-
-            BigInteger delta = BigInteger.ValueOf((int)root);
+            while (root.Pow(2).CompareTo(sqr) != 0);    // Проверяем на полный квадрат
 
             Rsa rsa = new Rsa(e);
-            rsa.GenerateKeys(t.Add(delta), t.Subtract(delta));
+            rsa.GenerateKeys(t.Add(root), t.Subtract(root));
             return rsa;
         }
 
@@ -158,7 +155,7 @@ namespace Lab2
         static Rsa WienerAttack(BigInteger e, BigInteger n)
         {
             // Вычисляем максимально допустимое D для атаки
-            BigInteger maxD = n.Sqrt().Sqrt().Divide(BigInteger.Three);
+            BigInteger maxD = n.Root(4);
 
             // Берём случайное число битности N, но меньше N
             BigInteger m = BigInteger.One.ShiftLeft(n.BitLength - 1).Add(BigInteger.One);
@@ -231,7 +228,7 @@ namespace Lab2
             return u;
         }
 
-        static BigInteger SharedModuleAttack(BigInteger e1, BigInteger e2, 
+        static BigInteger CommonModuleAttack(BigInteger e1, BigInteger e2, 
                                              BigInteger n, 
                                              BigInteger c1, BigInteger c2)
         {
@@ -246,6 +243,54 @@ namespace Lab2
             BigInteger y2 = c2.ModPow(s, n);
 
             return y1.Multiply(y2).Mod(n);
+        }
+
+        static void SpeedTest(int bits, int certainty)
+        {
+            BigInteger p, q, n, e, e1, e2, c1, c2, m;
+            Random rnd = new Random();
+            DateTime start;
+
+            Console.WriteLine("=== Speed test {0} bits ===", bits);
+            
+            #region Factorization
+            q = new BigInteger(bits / 2, certainty, rnd);
+            p = q.NextProbablePrime();
+            n = p.Multiply(q);
+
+            start = DateTime.Now;
+            FactorizationAttack(E, n);
+            Console.WriteLine("\nFactorization attack: {0} ms", (DateTime.Now - start).TotalMilliseconds);
+            #endregion
+
+            #region Wiener
+            e = new BigInteger(bits / 4 - 1, certainty, rnd);
+            Rsa rsa = new Rsa(e, bits, certainty, rnd, false);
+
+            start = DateTime.Now;
+            BigInteger d = WienerAttack(rsa.Params.d, rsa.Params.n).Params.d;
+            Console.WriteLine("\nWiener attack: {0} ms", (DateTime.Now - start).TotalMilliseconds);
+            if (d == null || e.CompareTo(d) != 0)
+                Console.WriteLine("Wiener attack failed");
+            else
+                Console.WriteLine("Wiener attack success");
+            #endregion
+            
+            #region Common module
+            e1 = new BigInteger(bits / 2, certainty, rnd);
+            e2 = e1.NextProbablePrime();
+            Rsa rsa1 = new Rsa(e1, bits, certainty, rnd, false);
+            Rsa rsa2 = new Rsa(e2);
+            rsa2.GenerateKeys(rsa1.Params.p, rsa1.Params.q);
+            c1 = rsa1.Encrypt(M);
+            c2 = rsa2.Encrypt(M);
+
+            start = DateTime.Now;
+            m = CommonModuleAttack(e1, e2, rsa2.Params.n, c1, c2);
+            Console.WriteLine("\nCommon module attack: {0} ms", (DateTime.Now - start).TotalMilliseconds);
+            Console.WriteLine("Common module attack {0}", 
+                (m.SignValue != 0 && m.CompareTo(M) == 0) ? "success" : "failed");
+            #endregion
         }
     }
 }
